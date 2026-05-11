@@ -1,0 +1,12 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# AI session files — local only, not for public repo
+CLAUDE.md
+CODE-REVIEW-PROMPT.md
+TGW-TEST-PLAN.md
+modules-bundle.txt
