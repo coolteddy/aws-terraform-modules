@@ -45,8 +45,6 @@ modules/
 COST.md              Estimated monthly cost for every module
 KEYWORDS.md          38 Terraform concepts with Terraform Console examples
 AWS-ACCESS.md        SSM, Tailscale, WireGuard, Client VPN setup guide
-TGW-TEST-PLAN.md     3-account Transit Gateway validation test (~$0.43, ~2 hours)
-CLAUDE.md            Session context for AI-assisted development
 ```
 
 ---
