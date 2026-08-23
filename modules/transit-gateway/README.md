@@ -16,7 +16,7 @@ VPC attachments using the `tgw_id` output — see usage examples below.
 | 3-account org (1 TGW + 3 attachments) | **~$144/month** |
 | RAM resource share | Free |
 
-**Tip:** For a short test (2 hours), total cost is ~$0.40. See TGW-TEST-PLAN.md in the repo root.
+**Tip:** For a short test (2 hours), total cost is ~$0.40. Keep the cross-repo test plan in the org/infrastructure orchestration repo, not in this reusable module repo.
 
 ---
 
@@ -210,9 +210,16 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "shared_services" {
 }
 
 # Route traffic to other VPCs via TGW in shared-services VPC route table
-resource "aws_route" "to_tgw" {
+resource "aws_route" "to_management" {
   route_table_id         = module.vpc.private_route_table_id
-  destination_cidr_block = "10.0.0.0/8"   # all spoke VPCs
+  destination_cidr_block = "10.0.0.0/16"
+  transit_gateway_id     = module.transit_gateway.tgw_id
+  depends_on             = [aws_ec2_transit_gateway_vpc_attachment.shared_services]
+}
+
+resource "aws_route" "to_sandbox" {
+  route_table_id         = module.vpc.private_route_table_id
+  destination_cidr_block = "10.2.0.0/16"
   transit_gateway_id     = module.transit_gateway.tgw_id
   depends_on             = [aws_ec2_transit_gateway_vpc_attachment.shared_services]
 }
@@ -243,10 +250,17 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "sandbox" {
   tags               = { Name = "sandbox-attachment" }
 }
 
-# Route all cross-account traffic via TGW
-resource "aws_route" "to_tgw" {
+# Route to management and shared-services via TGW
+resource "aws_route" "to_management" {
   route_table_id         = module.vpc.private_route_table_id
-  destination_cidr_block = "10.0.0.0/8"   # test-only supernet — use specific /16s in production
+  destination_cidr_block = "10.0.0.0/16"
+  transit_gateway_id     = "tgw-0abc123"
+  depends_on             = [aws_ec2_transit_gateway_vpc_attachment.sandbox]
+}
+
+resource "aws_route" "to_shared_services" {
+  route_table_id         = module.vpc.private_route_table_id
+  destination_cidr_block = "10.1.0.0/16"
   transit_gateway_id     = "tgw-0abc123"
   depends_on             = [aws_ec2_transit_gateway_vpc_attachment.sandbox]
 }
@@ -275,7 +289,7 @@ aws ec2 search-transit-gateway-routes \
 - Accounts NOT in `ram_share_principals` cannot see the TGW at all — they cannot attach even if `auto_accept_shared_attachments = "enable"`
 - Security groups on target instances still apply even when TGW routing succeeds — two layers of defence
 - For production with many tenants: consider `auto_accept_shared_attachments = "disable"` and a Lambda function to approve only known accounts
-- Use specific per-account /16 routes in production — not the `10.0.0.0/8` supernet used in the test plan
+- Use specific per-account /16 routes, such as `10.0.0.0/16`, `10.1.0.0/16`, and `10.2.0.0/16`; avoid broad `10.0.0.0/8` routes unless you have an explicit routing policy for the whole range
 
 ---
 
