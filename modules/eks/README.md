@@ -330,6 +330,91 @@ resource "aws_eks_access_policy_association" "deployer" {
 
 ---
 
+## User Access Management
+
+### Don't add individual users via Terraform
+
+Map **IAM Identity Center groups** to Access Entries instead. Users are managed via
+group membership — Terraform is only touched when adding a new group or changing
+what a group can do, not when individual users join or leave.
+
+```
+IAM Identity Center
+├── Group: eks-admins      → AmazonEKSClusterAdminPolicy  (DevOps / platform team)
+├── Group: eks-devops      → AmazonEKSAdminPolicy         (senior engineers)
+├── Group: eks-developers  → AmazonEKSEditPolicy, namespace scoped (developers)
+└── Group: eks-readonly    → AmazonEKSViewPolicy           (QA, support)
+```
+
+### One-time Terraform setup (per group)
+
+```hcl
+# In the consuming repo — do this once per group, not per user
+resource "aws_eks_access_entry" "developers" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = "<SSO-permission-set-role-ARN-for-eks-developers-group>"
+}
+
+resource "aws_eks_access_policy_association" "developers" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = "<SSO-permission-set-role-ARN-for-eks-developers-group>"
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+
+  access_scope {
+    type       = "namespace"
+    namespaces = ["tenant-a"]   # scoped — developer cannot see other namespaces
+  }
+}
+```
+
+### Onboarding a new user (no Terraform needed)
+
+**Console — 30 seconds:**
+```
+IAM Identity Center → Groups → eks-developers → Add users → search John Doe → Add
+```
+
+**AWS CLI:**
+```bash
+aws identitystore create-group-membership \
+  --identity-store-id d-xxxxxxxxxx \
+  --group-id <eks-developers-group-id> \
+  --member-id UserId=<john-doe-user-id> \
+  --profile setnay-admin
+```
+
+**John sets up kubectl (runs once on his machine):**
+```bash
+aws sso login --profile john-profile
+aws eks update-kubeconfig --name <cluster-name> --region eu-west-2 --profile john-profile
+kubectl get pods -n tenant-a
+```
+
+### Offboarding
+
+Remove John from the group in IAM Identity Center console. Access is revoked immediately —
+no Terraform apply, no kubectl changes needed.
+
+### Available EKS access policies
+
+| Policy | What they can do |
+|---|---|
+| `AmazonEKSClusterAdminPolicy` | Everything — cluster-admin |
+| `AmazonEKSAdminPolicy` | Most things except cluster-level RBAC |
+| `AmazonEKSEditPolicy` | Deploy, scale, exec into pods — no RBAC changes |
+| `AmazonEKSViewPolicy` | Read-only — `kubectl get/describe`, no exec |
+
+### Scaling user management (growth path)
+
+| Team size | Approach |
+|---|---|
+| 1–5 engineers | IAM Identity Center console |
+| 5–20 engineers | Slack bot + boto3 (`identitystore` API) — one command onboards a user |
+| 20–100 engineers | Buy Port or OpsLevel — SaaS internal developer portal |
+| 100+ engineers | Evaluate Backstage (Spotify open source, self-hosted) |
+
+---
+
 ## Inputs
 
 | Name | Description | Type | Default | Required |
