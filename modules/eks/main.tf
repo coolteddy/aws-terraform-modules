@@ -136,10 +136,6 @@ resource "aws_eks_cluster" "this" {
 
   tags = merge(var.tags, local.karpenter_tags, { Name = var.name })
 
-  lifecycle {
-    prevent_destroy = true
-  }
-
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policy
   ]
